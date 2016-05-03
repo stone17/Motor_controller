@@ -1,0 +1,480 @@
+/*  Borland C demo                                  */
+/*                                                  */
+/*  Please see Visual C samples for more details    */
+/*  and Visual C++ programs                         */
+/*                                                  */
+
+
+#include <stdio.h>
+#include <windows.h>
+#include <conio.h>
+#include <memory.h>
+
+
+#include "medefines.h"
+#include "DLLInit.h"           // for using with dynamic DLL accessing
+
+#ifdef __BORLANDC__
+#include "condefs.h"
+#include "medefines.h";
+#include "DLLInit.h";
+#include "DLLInit.cpp";
+#endif
+
+#include "TestConsoleGeneric.c"
+
+
+int communicate_lvdt(double v[], double w[], double channel[], double subdevice[], double range[])
+{
+    meOpenDynamicAccess();
+    
+	// Call generic console function in parent directory to 
+	// open system and list the available devices and subdevices.
+
+	int i_number_of_devices = TestConsoleMEIDSProlog();
+
+	if(i_number_of_devices <= 0)
+	{
+		return(-1);
+	}
+
+	// ---------------------------------------------------------------------
+	
+	// Count the AI sub-devices in the system 
+
+	int i_number_ai_subdevices = 0;
+
+	int i_me_error;
+
+	for(int index_device = 0; index_device < i_number_of_devices; index_device++)
+	{
+		int i_vendor_id;
+		int i_device_id;
+		int i_serial_no;
+		int i_bus_type;
+		int i_bus_no;
+		int i_dev_no;
+		int i_func_no;
+		int i_plugged;
+		
+		i_me_error = meQueryInfoDevice(	index_device,				// Device index
+										&i_vendor_id,				// Vendor ID returned here				
+										&i_device_id,				// Device ID returned here
+										&i_serial_no,				// Serial number returned here
+										&i_bus_type,				// Bus type returned here
+										&i_bus_no,					// Bus number returned here
+										&i_dev_no,					// Bus device number returned here
+										&i_func_no,					// Bus function number returned here
+										&i_plugged				);	// Plugged status returned here
+
+		if(i_plugged != ME_PLUGGED_IN)
+		{
+			continue;
+		}
+
+		int index_subdevice = 0;
+		
+		int i_number_of_subdevices;
+
+		i_me_error = meQueryNumberSubdevices(	index_device,				// Device index
+												&i_number_of_subdevices);	// Number of subdevices returned here
+		
+		while(true)
+		{
+			i_me_error = meQuerySubdeviceByType(index_device,					// Device
+												index_subdevice,				// Begin search at this sub-device 
+												ME_TYPE_AI,						// Type of sub-device to search for
+												ME_SUBTYPE_ANY,					// Sub-type of sub-device to search for
+												&index_subdevice	);			// sub-device index returned here
+
+			if(i_me_error != ME_ERRNO_SUCCESS)
+			{
+				break;
+			}
+
+			++i_number_ai_subdevices;
+
+			if(++index_subdevice >= i_number_of_subdevices)
+			{
+				break;
+			}
+		}
+	}
+
+	if(i_number_ai_subdevices == 0)
+	{
+		printf("****    No AI sub-devices found in system   ****\n\n");
+		
+		//printf("Press any key to terminate\n");
+		
+		//_getch();
+		
+		meClose(0);
+		
+		return -1;
+	};
+
+	// Make a list of the AI sub-devices 
+
+	struct SAIRange
+	{
+		int		m_iUnit;
+
+		double	m_dPhysicalMin;
+		double	m_dPhysicalMax;
+
+		int		m_iDigitalMax;
+	};
+
+#define MAX_RANGES	 16
+
+	struct SAISubddevice
+	{
+		int	m_iDeviceIndex;
+
+		int m_iSubdeviceIndex;
+
+		int m_iNumberOfChannels;
+
+		int m_iNumberOfRanges;
+
+		SAIRange m_arrRanges[MAX_RANGES];
+	};
+
+	SAISubddevice* arrSubdevices = new SAISubddevice[i_number_ai_subdevices];
+
+	i_number_ai_subdevices = 0;
+
+	for(int index_device = 0; index_device < i_number_of_devices; index_device++)
+	{
+		int i_vendor_id;
+		int i_device_id;
+		int i_serial_no;
+		int i_bus_type;
+		int i_bus_no;
+		int i_dev_no;
+		int i_func_no;
+		int i_plugged;
+		
+		i_me_error = meQueryInfoDevice(	index_device,				// Device index
+										&i_vendor_id,				// Vendor ID returned here				
+										&i_device_id,				// Device ID returned here
+										&i_serial_no,				// Serial number returned here
+										&i_bus_type,				// Bus type returned here
+										&i_bus_no,					// Bus number returned here
+										&i_dev_no,					// Bus device number returned here
+										&i_func_no,					// Bus function number returned here
+										&i_plugged				);	// Plugged status returned here
+
+		if(i_plugged != ME_PLUGGED_IN)
+		{
+			continue;
+		}
+
+		int index_subdevice = 0;
+		
+		int i_number_of_subdevices;
+
+		i_me_error = meQueryNumberSubdevices(	index_device,				// Device index
+												&i_number_of_subdevices);	// Number of subdevices returned here
+		
+		while(true)
+		{
+			i_me_error = meQuerySubdeviceByType(index_device,					// Device
+												index_subdevice,				// Begin search at this sub-device 
+												ME_TYPE_AI,						// Type of sub-device to search for
+												ME_SUBTYPE_ANY,					// Sub-type of sub-device to search for
+												&index_subdevice	);			// sub-device index returned here
+
+			if(i_me_error != ME_ERRNO_SUCCESS)
+			{
+				break;
+			}
+
+			arrSubdevices[i_number_ai_subdevices].m_iDeviceIndex = index_device;
+
+			arrSubdevices[i_number_ai_subdevices].m_iSubdeviceIndex = index_subdevice;
+
+			int i_number_of_channels;
+
+			i_me_error =  meQueryNumberChannels(index_device,					// Device index
+												index_subdevice,				// Subdevice index, 
+												&i_number_of_channels	);			// Number of ramges returned here
+
+
+			if(i_me_error != ME_ERRNO_SUCCESS)
+			{
+				printf("****    meQueryNumberChannels - Error: %d    ****\n\n", i_me_error);
+
+				//printf("Press any key to terminate\n");
+				
+				//_getch();
+				
+				meClose(0);
+				
+				return -1;
+			}
+
+			arrSubdevices[i_number_ai_subdevices].m_iNumberOfChannels = i_number_of_channels;
+
+			int i_number_of_ranges;
+
+			i_me_error =  meQueryNumberRanges(	index_device,					// Device index
+												index_subdevice,				// Subdevice index, 
+												ME_UNIT_ANY,					// Unit
+												&i_number_of_ranges	);			// Number of ramges returned here
+
+
+			if(i_me_error != ME_ERRNO_SUCCESS)
+			{
+				printf("****    meQueryNumberRanges - Error: %d    ****\n\n", i_me_error);
+
+				//printf("Press any key to terminate\n");
+				
+				//_getch();
+				
+				meClose(0);
+				
+				return -1;
+			}
+
+			if(i_number_of_ranges > MAX_RANGES)
+			{
+				i_number_of_ranges = MAX_RANGES;
+			}
+
+			arrSubdevices[i_number_ai_subdevices].m_iNumberOfRanges = i_number_of_ranges;
+
+			for(int index_range = 0; index_range < i_number_of_ranges; index_range++)
+			{
+				int i_unit;
+
+				double d_phys_min;
+				double d_phys_max;
+
+				int i_digital_max;
+
+				i_me_error = meQueryRangeInfo(	index_device,					// Device index
+												index_subdevice,				// Subdevice index, 
+												index_range,					// Range index
+												&i_unit,							// Unit returned here - not require
+												&d_phys_min,					// Physical minimum returned here
+												&d_phys_max,					// Physical maximum returned here
+												&i_digital_max				);	// Digital maximum value returned here
+
+				if(i_me_error != ME_ERRNO_SUCCESS)
+				{
+					printf("****    meQueryRangeInfo - Error: %d    ****\n\n", i_me_error);
+
+					//printf("Press any key to terminate\n");
+					
+					//_getch();
+					
+					meClose(0);
+					
+					return -1;
+				}
+
+				arrSubdevices[i_number_ai_subdevices].m_arrRanges[index_range].m_iUnit = i_unit;
+
+				arrSubdevices[i_number_ai_subdevices].m_arrRanges[index_range].m_dPhysicalMin = d_phys_min;
+				arrSubdevices[i_number_ai_subdevices].m_arrRanges[index_range].m_dPhysicalMax = d_phys_max;
+
+				arrSubdevices[i_number_ai_subdevices].m_arrRanges[index_range].m_iDigitalMax = i_digital_max;
+			}
+
+			++i_number_ai_subdevices;
+
+			if(++index_subdevice >= i_number_of_subdevices)
+			{
+				break;
+			}
+		}
+	}
+
+	//printf("%d AI sub-devices found: in System\n\n", i_number_ai_subdevices);
+
+	/*for(int index_subdevice = 0; index_subdevice < i_number_ai_subdevices; index_subdevice++)
+	{
+		printf("%2d.   Device: %2d  Sub-device: %2d  Channels: %2d  Ranges: %2d\n\n",
+				index_subdevice + 1,
+				arrSubdevices[index_subdevice].m_iDeviceIndex,
+				arrSubdevices[index_subdevice].m_iSubdeviceIndex,
+				arrSubdevices[index_subdevice].m_iNumberOfChannels,
+				arrSubdevices[index_subdevice].m_iNumberOfRanges		);
+	}*/
+
+	//printf("Press any key to continue\n");
+
+	//getch();
+
+	// NOW WE HAVE FOUND SOMETHING. 
+	// USER HAD TO PRESS ENTER --> REMOVED
+	// NOW USER MUST SELECT CHANNEL (0->15) --> INPUT
+	// CHANNEL IS X[0], SUBDEVICE IS X[1],  IS X[2]
+	// THIS IS ALSO DONE ONLY ONCE
+
+	//printf("\n\n");
+
+	char buffer[512];
+
+	bool b_terminate = false;
+	
+	//while(true)
+	//{
+		int index_subdevice;
+
+		// SECOND PARAMETER (DEFAULT 0)
+		index_subdevice = subdevice[0];
+
+
+
+		int index_channel;
+
+		// FIRST PARAMETER (DEFAULT 0)
+		index_channel = channel[0];
+
+
+		int index_range;
+
+		// THIRD PARAMETER (DEFAULT 0)
+		index_range = range[3];		
+
+	
+		// Configure the device
+
+		i_me_error = meIOSingleConfig(	arrSubdevices[index_subdevice].m_iDeviceIndex,			// Device index
+										arrSubdevices[index_subdevice].m_iSubdeviceIndex,		// Subdevice index, 
+										index_channel,											// Channel index
+										index_range,											// Range index
+										ME_REF_AI_GROUND,										// Reference
+										ME_TRIG_CHAN_DEFAULT,									// Trigger channel - standard
+										ME_TRIG_TYPE_SW,										// Trigger type - software
+										ME_VALUE_NOT_USED,										// Trigger edge - not applicable
+										ME_IO_SINGLE_CONFIG_NO_FLAGS						);	// Flags
+
+		if(i_me_error != ME_ERRNO_SUCCESS)
+		{
+			printf("****    meIOSingleConfig - Error: %d    ****\n\n", i_me_error);
+
+			//printf("Press any key to terminate\n");
+			
+			//_getch();
+			
+			meClose(0);
+			
+			return -1;
+		}
+
+		
+
+			
+			meIOSingle_t io_single[1];
+
+			io_single[0].iDevice = arrSubdevices[index_subdevice].m_iDeviceIndex;
+
+			io_single[0].iSubdevice = arrSubdevices[index_subdevice].m_iSubdeviceIndex;
+			io_single[0].iChannel	= index_channel;
+			io_single[0].iDir		= ME_DIR_INPUT;
+			io_single[0].iValue		= 0;
+			io_single[0].iTimeOut	= 0;							// No timeout - not required for software output
+			io_single[0].iFlags		= ME_IO_SINGLE_TYPE_NO_FLAGS;
+			
+			i_me_error = meIOSingle(&io_single[0],				// Output list 
+									1,							// Number of elements in the above list 
+									ME_IO_SINGLE_NO_FLAGS	);	// Flags
+
+			if(i_me_error != ME_ERRNO_SUCCESS)
+			{
+				printf("****    meIOSingle - Error: %d    ****\n\n", i_me_error);
+
+				//printf("Press any key to terminate\n");
+				
+				//_getch();
+				
+				meClose(0);
+				
+				return -1;
+			}
+
+			double d_physical_value;;
+
+			i_me_error = meUtilityDigitalToPhysical(arrSubdevices[index_subdevice].m_arrRanges[index_range].m_dPhysicalMin,		// Minimum physiacal value
+													arrSubdevices[index_subdevice].m_arrRanges[index_range].m_dPhysicalMax,		// Maximum physical value
+													arrSubdevices[index_subdevice].m_arrRanges[index_range].m_iDigitalMax,		// Maximum digital value
+													io_single[0].iValue,														// Digital value to convert
+													ME_VALUE_NOT_USED,															// Module type - not required
+													0.0,																		// Reference value - not required
+													&d_physical_value														);	// Corresponding physical value returned here
+
+			if(i_me_error != ME_ERRNO_SUCCESS)
+			{
+				printf("****    meUtilityDigitalToPhysical - Error: %d    ****\n\n", i_me_error);
+
+				//printf("Press any key to terminate\n");
+				
+				//_getch();
+				
+				meClose(0);
+				
+				return -1;
+			}
+
+			//printf("Input %5.2lf V (%5d)\n\n", d_physical_value, io_single[0].iValue);
+			
+			// TODO: THESE ARE OUTPUT VALUES
+			v[0] = d_physical_value;
+			w[0] = io_single[0].iValue;
+		//}
+	//}
+
+	// ---------------------------------------------------------------------
+	
+	meClose(0);
+    meCloseDynamicAccess();
+	
+	//printf("Program completed successfully - Press any key to terminate\n\n");
+
+	// DON'T HIT ENTER TO QUIT, THIS IS DONE AUTOMATICALLY NOW!
+	//_getch();
+	
+	return 0;
+}
+
+
+void mexFunction( int nlhs, mxArray *plhs[],
+                  int nrhs, const mxArray *prhs[] )
+{
+  double *channel, *subdevice, *range, *v, *w;
+  mwSize mrows,ncols;
+  
+  /* Check for proper number of arguments. */
+  if(nrhs!=3) {
+    mexErrMsgTxt("Three inputs required.");
+  } else if(nlhs!=2) {
+    mexErrMsgTxt("Too many output arguments");
+  }
+  
+  /* The input must be a noncomplex scalar double.*/
+  mrows = mxGetM(prhs[0]);
+  ncols = mxGetN(prhs[0]);
+  if( !mxIsDouble(prhs[0]) || mxIsComplex(prhs[0]) ||
+      !(mrows==1 && ncols==1) ) {
+    mexErrMsgTxt("Input must be a noncomplex scalar double.");
+  }
+  
+  /* Create matrix for the return argument. */
+  plhs[0] = mxCreateDoubleMatrix(mrows,ncols, mxREAL);
+  plhs[1] = mxCreateDoubleMatrix(mrows,ncols, mxREAL);
+  
+  /* Assign pointers to each input and output. */
+  channel   = mxGetPr(prhs[0]);
+  subdevice = mxGetPr(prhs[1]);
+  range     = mxGetPr(prhs[2]);
+  v = mxGetPr(plhs[0]);
+  w = mxGetPr(plhs[1]);
+  
+
+  communicate_lvdt(v,w,channel,subdevice,range);
+}
+

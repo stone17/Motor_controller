@@ -1,0 +1,28 @@
+function [ actual_position ] = refresh_motor_position(motor)
+global lvdt_config;
+global global_px;
+global global_py;
+global global_pz;
+
+    if( motor == 'X' )
+        disp_value = global_px;
+        lvdt = lvdt_config.X;
+        cal=load('LVDT_X_132358_001_int.cal','-ascii');
+    elseif( motor == 'Y' ) 
+        disp_value = global_py;
+        lvdt = lvdt_config.Y;
+        cal=load('LVDT_X_132358_001_int.cal','-ascii');
+    elseif( motor == 'Z' )
+        disp_value = global_pz;
+        lvdt = lvdt_config.Z;
+        cal=load('LVDT_X_132358_001_int.cal','-ascii');
+    else
+        return;
+    end;
+    actual_position = get_position(lvdt);
+    mini=sqrt((cal(:,1)-actual_position).^2);
+    
+    set( disp_value, 'String', actual_position);
+    pause(0.0001);
+end
+

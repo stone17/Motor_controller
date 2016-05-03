@@ -1,0 +1,1 @@
+int TestConsoleMEIDSProlog(void);
